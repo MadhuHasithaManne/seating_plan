@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seating and Attendance Generator</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        body {
+    font-family: 'Roboto', sans-serif;
+    background-color: #f9f9f9;
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    width: 90%;
+    margin: auto;
+    padding: 20px;
+    background: #fff;
+    border-radius: 10px;
+    margin-top: 30px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+h1 {
+    text-align: center;
+    color: #333;
+    margin-bottom: 20px;
+}
+
+.room {
+    margin-bottom: 20px;
+}
+
+.room h2 {
+    color: #007bff;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+table th, table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: center;
+}
+
+table th {
+    background-color: #f2f2f2;
+    color: #333;
+}
+
+label {
+    display: block;
+    margin: 10px 0 5px;
+    font-size: 16px;
+    color: #555;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="file"] {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0 20px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 14px;
+}
+
+button {
+    display: block;
+    width: 100%;
+    background-color: #007bff;
+    color: #fff;
+    border: none;
+    padding: 10px;
+    border-radius: 5px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+.hidden {
+    display: none;
+}
+
+.fade-in {
+    animation: fadeIn 1s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.success-message {
+    background-color: #d4edda;
+    color: #155724;
+    padding: 15px;
+    border: 1px solid #c3e6cb;
+    border-radius: 5px;
+    margin: 20px 0;
+    text-align: center;
+}
+    </style>
+</head>
+<body>
+    <div class="container fade-in">
+        <h1><i class="fas fa-user-graduate"></i> Seating and Attendance Generator</h1>
+        <form method="POST" action="/" enctype="multipart/form-data">
+            <label for="num_departments">Number of Departments:</label>
+            <input type="number" name="num_departments" id="num_departments" placeholder="Enter number of departments" required>
+            
+            <div id="departments"></div>
+            
+            <button type="button" onclick="generateDepartmentInputs()">Generate Department Inputs</button>
+            
+            <label for="roll_numbers_file">Upload Roll Numbers File:</label>
+            <input type="file" name="roll_numbers_file" id="roll_numbers_file" required>
+            
+            <button type="submit"><i class="fas fa-paper-plane"></i> Submit</button>
+        </form>
+        
+        {% if buttons_visible %}
+        <div class="success-message">
+            Data submitted successfully! You can now generate the seating plan and attendance sheets.
+        </div>
+        <form action="{{ url_for('seating_plan') }}" method="GET">
+            <button><i class="fas fa-chair"></i> Generate Seating Plan</button>
+        </form>
+        <!-- <form action="{{ url_for('generate_attendance_sheets') }}" method="GET">
+            <button><i class="fas fa-file-alt"></i> Generate Attendance Sheets</button>
+        </form> -->
+        {% endif %}
+    </div>
+    
+    <script>
+        function generateDepartmentInputs() {
+            const numDepartments = document.getElementById('num_departments').value;
+            const container = document.getElementById('departments');
+            container.innerHTML = '';
+
+            for (let i = 0; i < numDepartments; i++) {
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <label>Department Name ${i + 1}:</label>
+                    <input type="text" name="department_names[]" placeholder="Enter department name" required>
+                    <label>Subject Code ${i + 1}:</label>
+                    <input type="text" name="subject_codes[]" placeholder="Enter subject code" required>
+                `;
+                container.appendChild(div);
+            }
+        }
+    </script>
+</body>
+</html>

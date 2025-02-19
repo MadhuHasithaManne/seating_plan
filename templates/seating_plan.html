@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seating Plan</title>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .unassigned-table {
+            margin-top: 20px;
+        }
+        
+    </style>
+</head>
+<body>
+    <h2>Seating Plan</h2>
+
+    <!-- Room Assignments -->
+    <h3>Room Assignments</h3>
+    {% if rooms %}
+        {% for room in rooms %}
+            <h4>Room {{ room.room_number }}</h4>
+            <table>
+                <tr>
+                    <th>Side A</th>
+                    <th>Side B</th>
+                </tr>
+                {% for i in range(24) %}
+                <tr>
+                    <td>{{ room.side_a[i] if i < room.side_a|length else "---" }}</td>
+                    <td>{{ room.side_b[i] if i < room.side_b|length else "---" }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        {% endfor %}
+    {% else %}
+        <p>No rooms have been assigned yet.</p>
+    {% endif %}
+
+    <!-- Unassigned Students -->
+    <h3 class="unassigned-table">Unassigned Students</h3>
+    {% if unassigned_students %}
+        <table>
+            <tr>
+                <th>Department</th>
+                <th>Roll Numbers</th>
+                <th>Subject Code</th>
+            </tr>
+            {% for dept, data in unassigned_students.items() %}
+            <tr>
+                <td>{{ dept }}</td>
+                <td>{{ ", ".join(data.students) }}</td>
+                <td>{{ data.subject_code }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p>No unassigned students.</p>
+    {% endif %}
+
+    <form action="{{ url_for('generate_attendance_sheets') }}" method="GET">
+        <button><i class="fas fa-file-alt"></i> Generate Attendance Sheets</button>
+    </form>
+</body>
+</html>
