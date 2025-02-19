@@ -203,7 +203,7 @@ def seating_plan():
             room_number += 1
 
         return render_template(
-            "seating_plan.html",
+            "result.html",
             rooms=rooms
         )
     except Exception as e:
