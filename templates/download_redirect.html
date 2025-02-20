@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Downloading...</title>
+    <script>
+        function triggerDownload(url) {
+            var a = document.createElement("a");
+            a.href = url;
+            a.download = "";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        window.onload = function() {
+            console.log("Starting downloads...");
+            triggerDownload("{{ url_for('download_attendance') }}");
+
+            setTimeout(function() {
+                triggerDownload("{{ url_for('download_pdf') }}");
+            }, 3000);
+
+            setTimeout(function() {
+                window.location.href = "{{ url_for('seating_plan') }}";
+            }, 5000);
+        };
+    </script>
+    <style>
+        /* White, Black, and #007bff Theme */
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f9f9f9;
+            color: #000;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        h2 {
+            font-size: 28px;
+            margin-bottom: 15px;
+            color: #007bff; /* Bright blue */
+            font-weight: bold;
+        }
+
+        p {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .loader {
+            border: 6px solid rgba(0, 0, 0, 0.2);
+            border-top: 6px solid #007bff; /* Bright blue */
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-top: 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .footer {
+            position: absolute;
+            bottom: 10px;
+            font-size: 14px;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <h2>Downloading Attendance Sheets and Department-Wise Seating Plan</h2>
+    <p>You will be redirected to the seating plan shortly...</p>
+    <div class="loader"></div> <!-- Spinning Loader -->
+    <div class="footer">Please do not refresh the page.</div>
+</body>
+</html>

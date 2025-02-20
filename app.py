@@ -3,10 +3,17 @@ import pandas as pd
 import zipfile
 import os
 import uuid
+import re
+from flask import Flask, render_template, send_file
+from io import BytesIO
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet
 
 app = Flask(__name__)
 app.secret_key = "supersecretkey12345"  # Mandatory for session handling
-
+LATEST_ATTENDANCE_DIR = None
 # Directory for storing generated files
 OUTPUT_DIR = os.path.join(os.getcwd(), 'static', 'output_files')
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -166,51 +173,91 @@ def seating_plan():
             for student in data["students"]:
                 unassigned_students_list.append((dept, student[1], data["subject_code"]))
 
+        # Sort unassigned students department-wise
+        unassigned_students_list.sort(key=lambda x: x[0])  # Sorting by department
+
         index = 0
         total_unassigned = len(unassigned_students_list)
 
+        # Function to find available rooms with a fully unoccupied side
+        def find_empty_side():
+            for room in rooms:
+                side_a_unplaced = all(x[0] == "---" for x in room["side_a"])
+                side_b_unplaced = all(x[0] == "---" for x in room["side_b"])
+                
+                if side_a_unplaced:
+                    return room, "side_a"
+                elif side_b_unplaced:
+                    return room, "side_b"
+            
+            return None, None
+
         while index < total_unassigned:
-            room = {"room_number": room_number, "side_a": [], "side_b": []}
-            side_a, side_b = [], []
+            room, side_to_fill = find_empty_side()
 
-            # Fill Side A first
-            while len(side_a) < 24 and index < total_unassigned:
-                side_a.append(unassigned_students_list[index])
-                index += 1
+            if room and side_to_fill:
+                # Fill the available side with one department's students
+                dept_to_place = unassigned_students_list[index][0]  # Get department of the first unassigned student
+                side_students = []
 
-            # Fill Side B ensuring no same subject codes in the same bench
-            for i in range(24):
-                if index >= total_unassigned:
-                    break
-                current_student = unassigned_students_list[index]
-
-                # Ensure subject codes are different for Side A and Side B at the same bench
-                if side_a[i][2] is None or side_a[i][2] != current_student[2]:
-                    side_b.append(current_student)
+                while len(side_students) < 24 and index < total_unassigned and unassigned_students_list[index][0] == dept_to_place:
+                    side_students.append(unassigned_students_list[index])
                     index += 1
-                else:
-                    side_b.append(("---", "---", None))  # Keep it empty if subject codes match
 
-            # Fill remaining spots with "---"
-            while len(side_a) < 24:
-                side_a.append(("---", "---", None))
-            while len(side_b) < 24:
-                side_b.append(("---", "---", None))
+                # Fill remaining spots with "---"
+                while len(side_students) < 24:
+                    side_students.append(("---", "---", None))
 
-            room["side_a"] = side_a
-            room["side_b"] = side_b
-            rooms.append(room)
-            room_number += 1
+                room[side_to_fill] = side_students  # Update the room's side
+            else:
+                # If no empty rooms, create a new room
+                room = {"room_number": room_number, "side_a": [], "side_b": []}
+                side_a, side_b = [], []
+
+                # Fill Side A first
+                while len(side_a) < 24 and index < total_unassigned:
+                    side_a.append(unassigned_students_list[index])
+                    index += 1
+
+                # Fill Side B ensuring different subject codes
+                for i in range(24):
+                    if index >= total_unassigned:
+                        break
+                    current_student = unassigned_students_list[index]
+
+                    # Ensure subject codes are different for Side A and Side B at the same bench
+                    if side_a[i][2] is None or (side_a[i][2] != current_student[2] and side_a[i][0] != current_student[0]):
+                        side_b.append(current_student)
+                        index += 1
+                    else:
+                        side_b.append(("---", "---", None))  # Keep it empty if subject codes match
+
+                # Fill remaining spots with "---"
+                while len(side_a) < 24:
+                    side_a.append(("---", "---", None))
+                while len(side_b) < 24:
+                    side_b.append(("---", "---", None))
+
+                room["side_a"] = side_a
+                room["side_b"] = side_b
+                rooms.append(room)
+                room_number += 1
+
+
+
 
         return render_template(
-            "result.html",
-            rooms=rooms
-        )
+        "result.html",rooms=rooms,
+        buttons_visible=True,
+        department_buttons_visible=session.get('department_buttons_visible', False)
+    )
+    
     except Exception as e:
         return f"An error occurred: {str(e)}"
 
 @app.route("/generate_attendance_sheets")
 def generate_attendance_sheets():
+    global LATEST_ATTENDANCE_DIR
     try:
         session_id = session.get("session_id")
         department_subject_map = session.get("department_subject_map")
@@ -300,66 +347,130 @@ def generate_attendance_sheets():
             for student in data["students"]:
                 unassigned_students_list.append((dept, student[1], data["subject_code"]))
 
+        # Sort unassigned students department-wise
+        unassigned_students_list.sort(key=lambda x: x[0])  # Sorting by department
+
         index = 0
         total_unassigned = len(unassigned_students_list)
 
+        # Function to find available rooms with a fully unoccupied side
+        def find_empty_side():
+            for room in rooms:
+                side_a_unplaced = all(x[0] == "---" for x in room["side_a"])
+                side_b_unplaced = all(x[0] == "---" for x in room["side_b"])
+                
+                if side_a_unplaced:
+                    return room, "side_a"
+                elif side_b_unplaced:
+                    return room, "side_b"
+            
+            return None, None
+
         while index < total_unassigned:
-            room = {"room_number": room_number, "side_a": [], "side_b": []}
-            side_a, side_b = [], []
+            room, side_to_fill = find_empty_side()
 
-            # Fill Side A first
-            while len(side_a) < 24 and index < total_unassigned:
-                side_a.append(unassigned_students_list[index])
-                index += 1
+            if room and side_to_fill:
+                # Fill the available side with one department's students
+                dept_to_place = unassigned_students_list[index][0]  # Get department of the first unassigned student
+                side_students = []
 
-            # Fill Side B ensuring no same subject codes in the same bench
-            for i in range(24):
-                if index >= total_unassigned:
-                    break
-                current_student = unassigned_students_list[index]
-
-                # Ensure subject codes are different for Side A and Side B at the same bench
-                if side_a[i][2] is None or side_a[i][2] != current_student[2]:
-                    side_b.append(current_student)
+                while len(side_students) < 24 and index < total_unassigned and unassigned_students_list[index][0] == dept_to_place:
+                    side_students.append(unassigned_students_list[index])
                     index += 1
-                else:
-                    side_b.append(("---", "---", None))  # Keep it empty if subject codes match
 
-            while len(side_a) < 24:
-                side_a.append(("---", "---", None))
-            while len(side_b) < 24:
-                side_b.append(("---", "---", None))
+                # Fill remaining spots with "---"
+                while len(side_students) < 24:
+                    side_students.append(("---", "---", None))
 
-            room["side_a"] = side_a
-            room["side_b"] = side_b
-            rooms.append(room)
-            room_number += 1
+                room[side_to_fill] = side_students  # Update the room's side
+            else:
+                # If no empty rooms, create a new room
+                room = {"room_number": room_number, "side_a": [], "side_b": []}
+                side_a, side_b = [], []
+
+                # Fill Side A first
+                while len(side_a) < 24 and index < total_unassigned:
+                    side_a.append(unassigned_students_list[index])
+                    index += 1
+
+                # Fill Side B ensuring different subject codes
+                for i in range(24):
+                    if index >= total_unassigned:
+                        break
+                    current_student = unassigned_students_list[index]
+
+                    # Ensure subject codes are different for Side A and Side B at the same bench
+                    if side_a[i][2] is None or (side_a[i][2] != current_student[2] and side_a[i][0] != current_student[0]):
+                        side_b.append(current_student)
+                        index += 1
+                    else:
+                        side_b.append(("---", "---", None))  # Keep it empty if subject codes match
+
+                # Fill remaining spots with "---"
+                while len(side_a) < 24:
+                    side_a.append(("---", "---", None))
+                while len(side_b) < 24:
+                    side_b.append(("---", "---", None))
+
+                room["side_a"] = side_a
+                room["side_b"] = side_b
+                rooms.append(room)
+                room_number += 1
+
 
         # Step 3: Generate Attendance Sheets
         output_dir = os.path.join(OUTPUT_DIR, "attendance_sheets")
         os.makedirs(output_dir, exist_ok=True)
-
         for room in rooms:
             room_file_path = os.path.join(output_dir, f"room_{room['room_number']}_attendance.xlsx")
-            with pd.ExcelWriter(room_file_path) as writer:
+
+            with pd.ExcelWriter(room_file_path, engine='xlsxwriter') as writer:
                 for department in remaining_departments:
-                    side_a_data = [student[1] for student in room["side_a"] if student[0] == department]
-                    side_b_data = [student[1] for student in room["side_b"] if student[0] == department]
+                    # Filter students for this department in the current room
+                    roll_numbers = [student[1] for student in room["side_a"] if student[0] == department] + \
+                                [student[1] for student in room["side_b"] if student[0] == department]
 
-                    dept_data = {
-                        "Department": [department] * (len(side_a_data) + len(side_b_data)),
-                        "Roll Number": side_a_data + side_b_data,
-                        "Side": ["Side A"] * len(side_a_data) + ["Side B"] * len(side_b_data)
-                    }
+                    if not roll_numbers:  
+                        continue
 
-                    dept_df = pd.DataFrame(dept_data)
-                    sheet_name = f"{department}_Room{room['room_number']}"
+                    
+                    dept_df = pd.DataFrame({
+                        "Roll Number": roll_numbers,
+                        "Signature": [""] * len(roll_numbers)  
+                    })
 
-                    dept_df.to_excel(writer, index=False, sheet_name=sheet_name)
+                    sheet_name = f"{department}_Room{room['room_number']}"[:31]  
+
+                    dept_df.to_excel(writer, index=False, sheet_name=sheet_name, startrow=2)
+
+                    workbook = writer.book
+                    worksheet = writer.sheets[sheet_name]
+
+                    title_format = workbook.add_format({'bold': True, 'font_size': 14, 'align': 'center'})
+                    worksheet.merge_range('A1:B1', "DVR & Dr. HS MIC College of Technology", title_format)
+
+                    dept_format = workbook.add_format({'bold': True, 'font_size': 12, 'align': 'center'})
+                    worksheet.merge_range('A2:B2', f"Department Name: {department}", dept_format)
+
+                    worksheet.set_column('A:A', 45) 
+                    worksheet.set_column('B:B', 45)  
+                    header_format = workbook.add_format({'bold': True, 'align': 'center', 'border': 1})
+                    worksheet.write(2, 0, "Roll Number", header_format)  
+                    worksheet.write(2, 1, "Signature", header_format) 
+                    border_format = workbook.add_format({'border': 1, 'align': 'center'})
+
+                    for row_idx in range(3, len(roll_numbers) + 3):  
+                        worksheet.write(row_idx, 0, dept_df.iloc[row_idx - 3, 0], border_format)  
+                        worksheet.write(row_idx, 1, "", border_format)  
+                    for row_idx in range(2, len(roll_numbers) + 3):
+                        worksheet.set_row(row_idx, 21.5)
+                        
+                    worksheet.set_margins(left=0.75, right=0, top=0.75, bottom=0.75)
 
             print(f"Attendance sheet for Room {room['room_number']} generated at {room_file_path}.")
+            LATEST_ATTENDANCE_DIR = output_dir
+            print(output_dir)
 
-        # Zip the files
         zip_filename = os.path.join(output_dir, "attendance_sheets.zip")
         with zipfile.ZipFile(zip_filename, 'w') as zipf:
             for room in rooms:
@@ -367,13 +478,129 @@ def generate_attendance_sheets():
                 zipf.write(room_file_path, os.path.basename(room_file_path))
 
         print(f"All attendance sheets have been zipped: {zip_filename}")
-
-        return send_from_directory(output_dir, "attendance_sheets.zip", as_attachment=True)
+        LATEST_ATTENDANCE_DIR = output_dir
+        print("generate attendance",LATEST_ATTENDANCE_DIR)
+        session['department_buttons_visible'] = True 
+        return render_template("download_redirect.html")
 
     except Exception as e:
         print(f"Error during attendance sheet generation: {str(e)}")
         return "An error occurred while generating the attendance sheets. Please try again."
 
+@app.route("/download_attendance")
+def download_attendance():
+    output_dir = os.path.join(OUTPUT_DIR, "attendance_sheets")
+    return send_from_directory(output_dir, "attendance_sheets.zip", as_attachment=True)
+
+def get_seating_plan():
+    global LATEST_ATTENDANCE_DIR
+    print("get:"+LATEST_ATTENDANCE_DIR)
+    if not LATEST_ATTENDANCE_DIR:
+        print("Error: No latest attendance sheet directory found.")
+        return {}
+
+    directory = LATEST_ATTENDANCE_DIR
+    seating_plan = {}
+
+    for filename in os.listdir(directory):
+        if filename.endswith(".xlsx") and filename.startswith("room_"):
+            match = re.search(r"room_(\d+)", filename)
+            if not match:
+                continue  
+            room_number = int(match.group(1))  
+            file_path = os.path.join(directory, filename)
+
+            try:
+                xls = pd.ExcelFile(file_path)
+                for sheet_name in xls.sheet_names:
+                    df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
+                    if df.shape[0] < 3:
+                        continue
+
+                    college_name = df.iloc[0, 0]
+                    department = df.iloc[1, 0]
+
+                    df = pd.read_excel(xls, sheet_name=sheet_name, skiprows=2)
+
+                    if "Roll Number" not in df.columns:
+                        continue
+
+                    if not df.empty:
+                        first_roll = df["Roll Number"].dropna().astype(str).min()
+                        last_roll = df["Roll Number"].dropna().astype(str).max()
+
+                        if department not in seating_plan:
+                            seating_plan[department] = {"college": college_name, "rooms": []}
+
+                        seating_plan[department]["rooms"].append({
+                            "Room": room_number,
+                            "First Roll": f"({first_roll})",
+                            "Last Roll": f"({last_roll})"
+                        })
+
+            except Exception as e:
+                print(f"Error processing file {filename}: {e}")
+
+    return seating_plan
+
+@app.route("/download_pdf")
+def download_pdf():
+    try:
+        seating_plan = get_seating_plan()
+        if not seating_plan:
+            return "Error: Seating plan could not be generated.", 500
+
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4))
+        elements = []
+        styles = getSampleStyleSheet()
+
+        for department, details in seating_plan.items():
+            college_name = details["college"]
+            rooms = details["rooms"]
+
+            elements.append(Paragraph(f"<b>{college_name}</b>", styles["Title"]))
+            elements.append(Spacer(1, 12))
+            elements.append(Paragraph(f"<b>Department: {department}</b>", styles["Heading2"]))
+            elements.append(Spacer(1, 12))
+
+            data = [["Room Number", "FROM", "TO"]]
+            for room in sorted(rooms, key=lambda x: x["Room"]):
+                data.append([room["Room"], room["First Roll"], room["Last Roll"]])
+
+            table = Table(data, colWidths=[100, 150, 150])
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 10),
+                ("GRID", (0, 0), (-1, -1), 1, colors.black),
+            ]))
+
+            elements.append(table)
+            elements.append(PageBreak())
+
+        if not elements:
+            return "Error: No data available for the PDF.", 500
+
+        doc.build(elements)
+        buffer.seek(0)  # Reset buffer
+
+        print("✅ PDF successfully generated!")
+
+        return send_file(
+            buffer,
+            as_attachment=True,
+            download_name="Seating_Plan.pdf",
+            mimetype="application/pdf"
+        )
+
+    except Exception as e:
+        print(f"❌ Error generating PDF: {e}")
+        return "Error generating PDF.", 500
+
+
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)), debug=True)
